@@ -198,6 +198,24 @@ export function useForestData(session: Session) {
     [events, toast],
   );
 
+  const editEvent = useCallback(
+    async (eventId: string, patch: { title: string; note: string; dueDate: string | null }) => {
+      const ev = events.find((e) => e.id === eventId);
+      if (!ev) return;
+      setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...patch } : e)));
+      try {
+        await backend.updateEvent(eventId, patch);
+        sound.tick();
+        toast('事件已更新', 'success');
+      } catch (err) {
+        setEvents((prev) => prev.map((e) => (e.id === eventId ? ev : e)));
+        toast(err instanceof Error ? err.message : '编辑失败', 'error');
+        throw err;
+      }
+    },
+    [events, toast],
+  );
+
   const removeEvent = useCallback(
     async (eventId: string) => {
       const ev = events.find((e) => e.id === eventId);
@@ -265,6 +283,7 @@ export function useForestData(session: Session) {
     plantTree,
     removeTree,
     addEvent,
+    editEvent,
     toggleEvent,
     removeEvent,
   };

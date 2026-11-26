@@ -976,19 +976,26 @@ textarea.input {
   background: #fdf1d8;
   color: #a06a10;
 }
-.event-del {
+.event-del,
+.event-edit {
   width: 28px;
   height: 28px;
   opacity: 0;
   transition: opacity 0.15s;
 }
 .event-item:hover .event-del,
-.event-del:focus-visible {
+.event-item:hover .event-edit,
+.event-del:focus-visible,
+.event-edit:focus-visible {
   opacity: 1;
 }
 .event-del:hover {
   background: #fdeae6;
   color: #b23a2a;
+}
+.event-edit:hover {
+  background: #eaf3da;
+  color: #3f8a3a;
 }
 .panel-quickadd {
   flex: none;
@@ -996,6 +1003,13 @@ textarea.input {
   gap: 8px;
   padding: 10px 12px;
   border-top: 2px dashed var(--line);
+}
+.input-readonly {
+  display: flex;
+  align-items: center;
+  background: #f4f1e2;
+  color: #5c6b52;
+  cursor: default;
 }
 .panel-quickadd .input {
   flex: 1;
@@ -1521,7 +1535,8 @@ textarea.input {
   .home-with-panel .hint-pill {
     display: none;
   }
-  .event-del {
+  .event-del,
+  .event-edit {
     opacity: 1;
   }
   .fab-main {

@@ -240,6 +240,19 @@ const localBackend = {
     saveLocalData(s.userId, data);
   },
 
+  async updateEvent(eventId: string, patch: { title: string; note: string; dueDate: string | null }): Promise<void> {
+    const s = readJSON<{ userId: string } | null>(sessionKey, null);
+    if (!s) return;
+    const data = localData(s.userId);
+    const ev = data.events.find((e) => e.id === eventId);
+    if (ev) {
+      ev.title = patch.title;
+      ev.note = patch.note;
+      ev.dueDate = patch.dueDate;
+    }
+    saveLocalData(s.userId, data);
+  },
+
   async deleteEvent(eventId: string): Promise<void> {
     const s = readJSON<{ userId: string } | null>(sessionKey, null);
     if (!s) return;
@@ -445,6 +458,14 @@ const cloudBackend = {
       .update({ completed_at: completedAt })
       .eq('id', eventId);
     if (error) fail('更新事件失败', error);
+  },
+
+  async updateEvent(eventId: string, patch: { title: string; note: string; dueDate: string | null }): Promise<void> {
+    const { error } = await supabase!
+      .from('events')
+      .update({ title: patch.title, note: patch.note, due_date: patch.dueDate })
+      .eq('id', eventId);
+    if (error) fail('编辑事件失败', error);
   },
 
   async deleteEvent(eventId: string): Promise<void> {

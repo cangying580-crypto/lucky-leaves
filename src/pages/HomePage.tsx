@@ -13,6 +13,7 @@ import { Onboarding } from '../components/Onboarding';
 import { Fab } from '../components/ui/Fab';
 import { generateTreeVisual } from '../lib/treeGen';
 import { sound } from '../lib/sound';
+import type { GrowthEvent } from '../types';
 
 export function HomePage() {
   const { session, signOut } = useAuth();
@@ -20,6 +21,7 @@ export function HomePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modal, setModal] = useState<'event' | 'plant' | 'journal' | null>(null);
   const [eventTreeId, setEventTreeId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<GrowthEvent | null>(null);
   const [burst, setBurst] = useState<Burst | null>(null);
   const [muted, setMuted] = useState(sound.isMuted());
   const [statsOpen, setStatsOpen] = useState(false);
@@ -53,6 +55,7 @@ export function HomePage() {
 
   const openAddEvent = () => {
     sound.open();
+    setEditingEvent(null);
     setEventTreeId(selectedId);
     setModal('event');
   };
@@ -135,6 +138,11 @@ export function HomePage() {
           events={data.eventsByTree.get(selectedTree.id) ?? []}
           onClose={() => setSelectedId(null)}
           onToggle={handleToggle}
+          onEdit={(ev) => {
+            sound.open();
+            setEditingEvent(ev);
+            setModal('event');
+          }}
           onDelete={(id) => void data.removeEvent(id)}
           onQuickAdd={(title) => data.addEvent(selectedTree.id, title, '', null)}
           onRemoveTree={(id) => {
@@ -158,8 +166,16 @@ export function HomePage() {
         <EventForm
           trees={data.trees}
           initialTreeId={eventTreeId}
-          onClose={() => setModal(null)}
-          onSubmit={data.addEvent}
+          editing={editingEvent}
+          onClose={() => {
+            setModal(null);
+            setEditingEvent(null);
+          }}
+          onSubmit={
+            editingEvent
+              ? (_treeId, title, note, dueDate) => data.editEvent(editingEvent.id, { title, note, dueDate })
+              : data.addEvent
+          }
           onGoPlant={() => setModal('plant')}
         />
       )}

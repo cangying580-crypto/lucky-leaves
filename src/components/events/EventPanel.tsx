@@ -7,6 +7,7 @@ interface Props {
   events: GrowthEvent[];
   onClose: () => void;
   onToggle: (id: string) => void;
+  onEdit: (ev: GrowthEvent) => void;
   onDelete: (id: string) => void;
   onQuickAdd: (title: string) => Promise<unknown>;
   onRemoveTree: (id: string) => void;
@@ -24,7 +25,7 @@ function isOverdue(ev: GrowthEvent): boolean {
   return ev.dueDate < local;
 }
 
-export function EventPanel({ tree, events, onClose, onToggle, onDelete, onQuickAdd, onRemoveTree }: Props) {
+export function EventPanel({ tree, events, onClose, onToggle, onEdit, onDelete, onQuickAdd, onRemoveTree }: Props) {
   const [quickTitle, setQuickTitle] = useState('');
   const [adding, setAdding] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -115,6 +116,11 @@ export function EventPanel({ tree, events, onClose, onToggle, onDelete, onQuickA
                 {ev.completedAt && <span className="done-chip">{new Date(ev.completedAt).toLocaleDateString('zh-CN')} 完成</span>}
               </span>
             </div>
+            <button className="icon-btn event-edit" aria-label={`编辑事件「${ev.title}」`} onClick={() => onEdit(ev)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                <path d="M4 20 L5.2 15.6 L15.6 5.2 C16.4 4.4 17.6 4.4 18.4 5.2 L18.8 5.6 C19.6 6.4 19.6 7.6 18.8 8.4 L8.4 18.8 Z M13.8 7 L17 10.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
             <button className="icon-btn event-del" aria-label={`删除事件「${ev.title}」`} onClick={() => onDelete(ev.id)}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
                 <path d="M5 7 L19 7 M10 7 L10 5 L14 5 L14 7 M8 7 L9 20 L15 20 L16 7" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
