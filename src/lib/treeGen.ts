@@ -37,6 +37,8 @@ export interface LeafSpec {
 export interface TreeVisual {
   stage: TreeStage;
   height: number;
+  trunkW: number;
+  lean: number;
   trunkPath: string;
   trunkShade: string;
   branches: string[];
@@ -124,7 +126,7 @@ export function generateTreeVisual(seed: string, birthYear: number): TreeVisual 
     });
   }
 
-  return { stage, height: H, trunkPath, trunkShade, branches, canopy, leaves, blossoms };
+  return { stage, height: H, trunkW: w, lean, trunkPath, trunkShade, branches, canopy, leaves, blossoms };
 }
 
 export function goldenLeafCount(total: number, done: number, all: number): number {

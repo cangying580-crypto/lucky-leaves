@@ -55,7 +55,7 @@ async function treePoint(page, title) {
       if (!label || !label.textContent.includes(t)) continue;
       const r = g.getBoundingClientRect();
       const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
+      const cy = r.top + r.height * 0.3;
       if (cx > 30 && cx < innerWidth - 30 && cy > 90 && cy < innerHeight - 120) return { x: cx, y: cy };
     }
     return null;

@@ -69,25 +69,6 @@ export function PlantTreeModal({ birthYear, onClose, onSubmit }: Props) {
                 <stop offset="0" stopColor="#a5d97f" />
                 <stop offset="1" stopColor="#4f9a41" />
               </linearGradient>
-              {[
-                ['#4f9a41', '#63b350', '#8fce6f'],
-                ['#3f8a6a', '#57ab8b', '#7fc9a4'],
-                ['#5aa845', '#79c257', '#a5d97f'],
-              ].map(([dark, mid, light], i) => (
-                <radialGradient key={i} id={`pt-can${i}`} cx="0.36" cy="0.3" r="0.85">
-                  <stop offset="0" stopColor={light} />
-                  <stop offset="0.55" stopColor={mid} />
-                  <stop offset="1" stopColor={dark} />
-                </radialGradient>
-              ))}
-              <radialGradient id="pt-canshade" cx="0.5" cy="0.5" r="0.5">
-                <stop offset="0" stopColor="#2f6e33" stopOpacity="0.34" />
-                <stop offset="1" stopColor="#2f6e33" stopOpacity="0" />
-              </radialGradient>
-              <radialGradient id="pt-canlight" cx="0.5" cy="0.5" r="0.5">
-                <stop offset="0" stopColor="#eaf7c8" stopOpacity="0.42" />
-                <stop offset="1" stopColor="#eaf7c8" stopOpacity="0" />
-              </radialGradient>
               <radialGradient id="pt-shadow" cx="0.5" cy="0.5" r="0.5">
                 <stop offset="0" stopColor="#2f6e33" stopOpacity="0.32" />
                 <stop offset="0.7" stopColor="#2f6e33" stopOpacity="0.14" />

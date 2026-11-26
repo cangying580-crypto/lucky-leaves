@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import type { Tree, GrowthEvent } from '../../types';
 import { CATEGORIES } from '../../types';
 import { generateTreeVisual, goldenLeafCount, hashSeed, mulberry32 } from '../../lib/treeGen';
+import { polyBlob, POLY_TONES } from './lowpoly';
 
 const LEAF_PATH = 'M0,-8 C5,-4 5,4 0,8 C-5,4 -5,-4 0,-8 Z';
 
@@ -15,15 +16,12 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-function scallops(cx: number, cy: number, r: number, n: number, phase: number) {
-  return Array.from({ length: n }, (_, i) => {
-    const a = phase + (i / n) * Math.PI * 2;
-    return { x: cx + Math.cos(a) * r * 0.98, y: cy + Math.sin(a) * r * 0.94, r: r * (0.24 + (i % 3) * 0.045) };
-  });
-}
-
 function TreeSpriteInner({ tree, events, birthYear, selected, idPrefix, interactive, onSelect }: Props) {
   const visual = useMemo(() => generateTreeVisual(tree.seed, birthYear), [tree.seed, birthYear]);
+  const blobs = useMemo(
+    () => visual.canopy.map((b, i) => polyBlob(b.cx, b.cy, b.r, b.tone, hashSeed(tree.seed) + i * 7919, 10)),
+    [visual, tree.seed],
+  );
   const micro = useMemo(() => {
     const rnd = mulberry32(hashSeed(tree.seed) ^ 0x9e3779b9);
     return Array.from({ length: 30 }, (_, i) => {
@@ -45,11 +43,13 @@ function TreeSpriteInner({ tree, events, birthYear, selected, idPrefix, interact
   const swayDelay = (hashSeed(tree.seed) % 600) / 100;
   const labelW = tree.title.length * 15 + 44;
   const main = visual.canopy[0];
+  const tw = visual.trunkW;
+  const H = visual.height;
+  const lean = visual.lean;
   const crownTop = main.cy - main.r;
   const ageYears = Math.round((Date.now() - new Date(tree.plantedAt).getTime()) / 31557600000);
   const ageLabel = ageYears > 0 ? `${ageYears}岁` : '新芽';
   const badgeW = ageLabel.length * 15 + 40;
-  const phase = (hashSeed(tree.seed) % 100) / 16;
 
   return (
     <g
@@ -80,6 +80,11 @@ function TreeSpriteInner({ tree, events, birthYear, selected, idPrefix, interact
       {selected && (
         <ellipse cx={main.cx} cy={main.cy} rx={main.r * 2.1} ry={main.r * 1.9} fill={`url(#${idPrefix}-glow)`} />
       )}
+      <path
+        d={`M ${-main.r * 1.1},9 L ${-main.r * 0.62},4 L ${main.r * 0.1},2.5 L ${main.r * 0.86},5 L ${main.r * 1.16},10 L ${main.r * 0.5},15 L ${-main.r * 0.4},15.5 Z`}
+        fill="#2f6e33"
+        opacity="0.16"
+      />
       <ellipse cx="0" cy="9" rx={main.r * 1.15} ry={main.r * 0.26} fill={`url(#${idPrefix}-shadow)`} />
       <g className="tree-hover">
         <g className="tree-sway" style={{ animationDelay: `${swayDelay}s` }}>
@@ -89,6 +94,20 @@ function TreeSpriteInner({ tree, events, birthYear, selected, idPrefix, interact
           ))}
           <path d={visual.trunkPath} fill={`url(#${idPrefix}-bark)`} stroke="#5a381e" strokeOpacity="0.45" strokeWidth="1.1" />
           <path d={visual.trunkShade} fill="#4a2d15" opacity="0.3" />
+          {/* 树干 low-poly 明暗面 */}
+          <path
+            d={`M ${-tw},4 C ${-tw * 0.9},${-H * 0.3} ${-tw * 0.55 + lean * 0.4},${-H * 0.66} ${-tw * 0.34 + lean},${-H} L ${lean * 0.1},${-H} C ${-tw * 0.12},${-H * 0.6} ${-tw * 0.36},${-H * 0.25} ${-tw * 0.44},4 Z`}
+            fill="#b98a5a"
+            opacity="0.5"
+          />
+          <path
+            d={`M ${-tw * 0.5},2 C ${-tw * 0.42},${-H * 0.4} ${-tw * 0.2 + lean * 0.5},${-H * 0.7} ${-tw * 0.14 + lean},${-H * 0.95} L ${lean * 0.02},${-H * 0.95} C ${-tw * 0.06},${-H * 0.6} ${-tw * 0.2},${-H * 0.3} ${-tw * 0.2},2 Z`}
+            fill="#d9b07c"
+            opacity="0.45"
+          />
+          <path d={`M ${-tw},4 L ${-tw * 2.05},8.5 L ${-tw * 0.45},7 Z M ${tw},4 L ${tw * 2.05},8.5 L ${tw * 0.45},7 Z`} fill="#6b4426" opacity="0.85" />
+          <path d={`M ${-tw * 1.4},7.4 L ${-tw * 0.7},5.6 L ${-tw * 0.2},7.2 Z M ${tw * 1.4},7.4 L ${tw * 0.7},5.6 L ${tw * 0.2},7.2 Z`} fill="#a9764a" opacity="0.7" />
+          <ellipse cx={lean} cy={-H + 3} rx={tw * 1.6} ry={tw * 0.55} fill="#2f6e33" opacity="0.28" />
           <path
             d={`M ${-main.r * 0.3},7 C ${-main.r * 0.16},3 ${-main.r * 0.1},-2 ${-main.r * 0.08},-10 M ${main.r * 0.3},7 C ${main.r * 0.16},3 ${main.r * 0.1},-2 ${main.r * 0.08},-10`}
             stroke={`url(#${idPrefix}-bark)`}
@@ -105,32 +124,25 @@ function TreeSpriteInner({ tree, events, birthYear, selected, idPrefix, interact
             opacity="0.55"
             fill="none"
           />
-          {/* 树冠：渐变体积 + 叶簇轮廓 */}
-          {visual.canopy.map((blob, i) => (
-            <g key={i}>
-              {scallops(blob.cx, blob.cy, blob.r, 9, phase + i).map((s, j) => (
-                <circle key={j} cx={s.x} cy={s.y} r={s.r} fill={`url(#${idPrefix}-can${blob.tone})`} />
-              ))}
-              <circle cx={blob.cx} cy={blob.cy} r={blob.r} fill={`url(#${idPrefix}-can${blob.tone})`} />
-            </g>
-          ))}
-          {/* 冠底暗部与顶光 */}
-          <ellipse cx={main.cx + main.r * 0.1} cy={main.cy + main.r * 0.62} rx={main.r * 0.85} ry={main.r * 0.4} fill={`url(#${idPrefix}-canshade)`} />
-          <ellipse cx={main.cx - main.r * 0.34} cy={main.cy - main.r * 0.42} rx={main.r * 0.5} ry={main.r * 0.32} fill={`url(#${idPrefix}-canlight)`} />
-          {/* 叶簇细节 */}
-          {visual.canopy.slice(0, 3).map((blob, i) =>
-            [0.35, 0.62, 0.85].map((f, j) => {
-              const a = phase + i * 2 + j * 2.1;
-              const cx = blob.cx + Math.cos(a) * blob.r * f * 0.7;
-              const cy = blob.cy + Math.sin(a) * blob.r * f * 0.6;
-              return (
-                <g key={`${i}-${j}`} opacity="0.5">
-                  <circle cx={cx} cy={cy} r={blob.r * 0.1} fill={`url(#${idPrefix}-canlight)`} />
-                  <circle cx={cx + blob.r * 0.09} cy={cy + blob.r * 0.05} r={blob.r * 0.07} fill={`url(#${idPrefix}-canlight)`} />
-                </g>
-              );
-            }),
-          )}
+          {/* 树冠：low-poly 三角面体积 */}
+          {blobs.map((pb, i) => {
+            const blob = visual.canopy[i];
+            const tones = POLY_TONES[blob.tone % 3];
+            return (
+              <g key={i}>
+                <path d={pb.outline} fill={tones[2]} />
+                {pb.facets.map((f, j) => (
+                  <path key={j} d={f.d} fill={f.fill} opacity={f.opacity ?? 1} />
+                ))}
+                <path d={pb.under} fill={tones[0]} opacity="0.28" />
+                <circle cx={blob.cx} cy={blob.cy} r={blob.r * 0.96} fill={`url(#${idPrefix}-can${blob.tone})`} opacity="0.32" />
+                <path d={pb.rim} fill="none" stroke={tones[4]} strokeWidth={blob.r * 0.06} opacity="0.55" />
+              </g>
+            );
+          })}
+          {/* 柔光罩：统一面片体积，保持治愈系圆润感 */}
+          <ellipse cx={main.cx - main.r * 0.34} cy={main.cy - main.r * 0.42} rx={main.r * 0.62} ry={main.r * 0.42} fill={`url(#${idPrefix}-canlight)`} opacity="0.75" />
+          <ellipse cx={main.cx + main.r * 0.1} cy={main.cy + main.r * 0.62} rx={main.r * 0.9} ry={main.r * 0.42} fill={`url(#${idPrefix}-canshade)`} opacity="0.7" />
           {/* 冠内细叶纹理 */}
           {micro.map((m, i) => (
             <path

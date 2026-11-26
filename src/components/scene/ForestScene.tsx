@@ -11,8 +11,9 @@ import {
   type CSSProperties,
 } from 'react';
 import type { GrowthEvent, Tree } from '../../types';
-import { generateTreeVisual, mulberry32 } from '../../lib/treeGen';
+import { generateTreeVisual, mulberry32, hashSeed } from '../../lib/treeGen';
 import { TreeSprite } from './TreeSprite';
+import { polyBlob, polyStone, POLY_TONES } from './lowpoly';
 
 interface ViewBox {
   x: number;
@@ -47,11 +48,21 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-function scallops(cx: number, cy: number, r: number, n: number, phase: number) {
-  return Array.from({ length: n }, (_, i) => {
-    const a = phase + (i / n) * Math.PI * 2;
-    return { x: cx + Math.cos(a) * r * 0.9, y: cy + Math.sin(a) * r * 0.86, r: r * (0.2 + (i % 3) * 0.035) };
-  });
+/* 低多边形叶团：远景用 soft 降低对比，形成空气透视 */
+function FacetBlob({ cx, cy, r, tone, seed, n = 12, soft = 0, p }: { cx: number; cy: number; r: number; tone: number; seed: number; n?: number; soft?: number; p: string }) {
+  const pb = useMemo(() => polyBlob(cx, cy, r, tone, seed, n, 0.3 + soft * 0.4), [cx, cy, r, tone, seed, n, soft]);
+  const tones = POLY_TONES[tone % 3];
+  return (
+    <g>
+      <path d={pb.outline} fill={tones[2]} />
+      {pb.facets.map((f, j) => (
+        <path key={j} d={f.d} fill={f.fill} opacity={(f.opacity ?? 1) * (1 - soft * 0.55)} />
+      ))}
+      <path d={pb.under} fill={tones[0]} opacity={0.28 - soft * 0.16} />
+      <circle cx={cx} cy={cy} r={r * 0.96} fill={`url(#${p}-can${tone % 3})`} opacity={0.34 - soft * 0.14} />
+      <path d={pb.rim} fill="none" stroke={tones[4]} strokeWidth={r * 0.06} opacity={0.55 - soft * 0.3} />
+    </g>
+  );
 }
 
 /* ---------- 装饰树 ---------- */
@@ -63,7 +74,7 @@ const DECO_TONES: [string, string, string][] = [
 ];
 
 function DecoTree({ x, y, s, tone, p }: { x: number; y: number; s: number; tone: number; p: string }) {
-  const phase = (x * 7 + y * 13) % 6;
+  const seed = hashSeed(`deco-${x}-${y}`);
   const blobs = [
     { cx: -20, cy: -52, r: 24 },
     { cx: 20, cy: -52, r: 24 },
@@ -75,18 +86,12 @@ function DecoTree({ x, y, s, tone, p }: { x: number; y: number; s: number; tone:
     <g transform={`translate(${x},${y}) scale(${s})`}>
       <ellipse cx="0" cy="7" rx="48" ry="11" fill={`url(#${p}-shadow)`} />
       <path d="M -7,4 C -6,-16 -4,-30 -3,-44 L 3,-44 C 4,-30 6,-16 7,4 C 3,7 -3,7 -7,4 Z" fill={`url(#${p}-bark)`} />
-      <path d="M -2,-14 C -2,-26 -1,-34 -1,-42" stroke="#c99a66" strokeWidth="1.6" opacity="0.5" fill="none" />
+      <path d="M -6,4 C -5,-16 -3,-30 -2.4,-44 L -0.6,-44 C -1.4,-28 -2.6,-14 -3.2,4 Z" fill="#c99a66" opacity="0.55" />
+      <path d="M 2,-44 C 3,-30 5,-16 6.4,4 L 4.4,4 C 3.4,-14 2.4,-28 1.4,-44 Z" fill="#4a2d15" opacity="0.4" />
       <path d="M 0,-30 L -16,-44 M 0,-24 L 15,-38" stroke={`url(#${p}-bark)`} strokeWidth="4.5" strokeLinecap="round" />
       {blobs.map((b, i) => (
-        <g key={i}>
-          {scallops(b.cx, b.cy, b.r, 8, phase + i).map((sc, j) => (
-            <circle key={j} cx={sc.x} cy={sc.y} r={sc.r} fill={`url(#${p}-can${tone % 3})`} />
-          ))}
-          <circle cx={b.cx} cy={b.cy} r={b.r} fill={`url(#${p}-can${tone % 3})`} />
-        </g>
+        <FacetBlob key={i} cx={b.cx} cy={b.cy} r={b.r} tone={tone % 3} seed={seed + i * 131} n={9} p={p} />
       ))}
-      <ellipse cx="2" cy="-46" rx="26" ry="12" fill={`url(#${p}-canshade)`} />
-      <ellipse cx="-10" cy="-80" rx="16" ry="10" fill={`url(#${p}-canlight)`} />
     </g>
   );
 }
@@ -213,7 +218,23 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
       r: 1.2 + rnd() * 1.6,
       c: rnd() > 0.6 ? '#fffdf5' : rnd() > 0.5 ? '#ffd76a' : '#f7c8dc',
     }));
-    return { borderBack, borderFront, sideLeft, sideRight, patches, rocks, mottle, pollen, tufts, dots };
+    const tris = Array.from({ length: 34 }, () => {
+      const x = rnd() * 1600;
+      const y = 170 + rnd() * 720;
+      const s = 60 + rnd() * 150;
+      const a = rnd() * Math.PI * 2;
+      const pt = (k: number) => {
+        const aa = a + (k / 3) * Math.PI * 2 + rnd() * 0.5;
+        const rr = s * (0.6 + rnd() * 0.6);
+        return `${(x + Math.cos(aa) * rr).toFixed(0)},${(y + Math.sin(aa) * rr * 0.55).toFixed(0)}`;
+      };
+      return {
+        d: `M ${pt(0)} L ${pt(1)} L ${pt(2)} Z`,
+        fill: ['#8cc96b', '#6fb954', '#9ad478', '#5fae47', '#b6e795'][Math.floor(rnd() * 5)],
+        op: 0.1 + rnd() * 0.14,
+      };
+    });
+    return { borderBack, borderFront, sideLeft, sideRight, patches, rocks, mottle, pollen, tufts, dots, tris };
   }, []);
 
   const inPond = (x: number, y: number) => {
@@ -232,6 +253,8 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
         <g key={i}>
           <ellipse cx={x} cy={y + 5} rx="9" ry="3" fill={`url(#${p}-shadow)`} />
           <rect x={x - 4} y={y - 26} width="8" height="30" rx="3" fill={`url(#${p}-wood)`} stroke="#8a5a33" strokeWidth="1.2" />
+          <path d={`M ${x + 0.6},${y - 25} L ${x + 3.4},${y - 24} L ${x + 3.4},${y + 2} L ${x + 0.6},${y + 3} Z`} fill="#6d4426" opacity="0.35" />
+          <path d={`M ${x - 3.4},${y - 25} L ${x + 3.4},${y - 25} L ${x + 1.6},${y - 27.4} L ${x - 1.8},${y - 27.4} Z`} fill="#e8c793" opacity="0.9" />
           <line x1={x - 1.4} y1={y - 22} x2={x - 1.4} y2={y - 2} stroke="#e8c793" strokeWidth="1.2" opacity="0.7" />
           <circle cx={x} cy={y - 17} r="1.1" fill="#6d4426" />
         </g>,
@@ -316,10 +339,6 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
           <stop offset="0" stopColor="#4f9a41" stopOpacity="0.3" />
           <stop offset="1" stopColor="#4f9a41" stopOpacity="0" />
         </radialGradient>
-        <radialGradient id={`${p}-reflect`} cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0" stopColor="#3f8a6a" stopOpacity="0.3" />
-          <stop offset="1" stopColor="#3f8a6a" stopOpacity="0" />
-        </radialGradient>
         <linearGradient id={`${p}-stone`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#ece2c8" />
           <stop offset="0.6" stopColor="#cfc4a8" />
@@ -358,6 +377,20 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
           <circle cx="9" cy="21" r="0.9" fill="#2f6e33" opacity="0.05" />
           <path d="M 20,3 l 3,2" stroke="#2f6e33" strokeWidth="0.7" opacity="0.05" />
         </pattern>
+        <clipPath id={`${p}-pondclip`}>
+          <path d={POND_D} />
+        </clipPath>
+        <linearGradient id={`${p}-reflectfade`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#22624f" stopOpacity="0.22" />
+          <stop offset="0.7" stopColor="#22624f" stopOpacity="0.09" />
+          <stop offset="1" stopColor="#22624f" stopOpacity="0" />
+        </linearGradient>
+        <filter id={`${p}-fgblur`} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="4.5" />
+        </filter>
+        <filter id={`${p}-refblur`} x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="2.2" />
+        </filter>
       </defs>
 
       {/* 草甸 */}
@@ -365,36 +398,30 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
       {deco.mottle.map((m, i) => (
         <ellipse key={i} cx={m.x} cy={m.y} rx={m.rx} ry={m.ry} fill={`url(#${p}-${m.light ? 'patchlight' : 'patchdark'})`} />
       ))}
+      {/* 低多边形草地明暗面 */}
+      {deco.tris.map((t, i) => (
+        <path key={`tr${i}`} d={t.d} fill={t.fill} opacity={t.op} />
+      ))}
+      <path d="M -200,640 L 520,240 L 900,240 L 180,700 Z" fill="#e8f7c0" opacity="0.06" />
+      <path d="M 700,900 L 1300,300 L 1560,300 L 1020,900 Z" fill="#e8f7c0" opacity="0.05" />
       <rect x="-1400" y="-300" width="4400" height="1600" fill={`url(#${p}-tooth)`} />
+
+      {/* 远景丘陵 */}
+      <path d="M -200,150 C 200,60 500,110 800,80 C 1100,50 1400,110 1800,70 L 1800,-300 L -200,-300 Z" fill="#bfe3a0" opacity="0.55" />
+      <path d="M -200,196 C 300,124 700,164 1000,132 C 1300,102 1600,152 1800,122 L 1800,-300 L -200,-300 Z" fill="#a8d88c" opacity="0.5" />
 
       {/* 边界树林 */}
       {deco.borderBack.map((b, i) => (
         <g key={`b${i}`} opacity="0.85">
-          {scallops(b.x, b.y, b.r, 7, b.ph).map((s, j) => (
-            <circle key={j} cx={s.x} cy={s.y} r={s.r} fill={`url(#${p}-can${b.t})`} />
-          ))}
-          <circle cx={b.x} cy={b.y} r={b.r} fill={`url(#${p}-can${b.t})`} />
+          <FacetBlob cx={b.x} cy={b.y} r={b.r} tone={b.t} seed={i * 97 + 11} n={10} soft={1} p={p} />
         </g>
       ))}
       <rect x="-1400" y="-300" width="4400" height="470" fill={`url(#${p}-haze)`} />
       {deco.borderFront.map((b, i) => (
-        <g key={`f${i}`}>
-          {scallops(b.x, b.y, b.r, 9, b.ph).map((s, j) => (
-            <circle key={j} cx={s.x} cy={s.y} r={s.r} fill={`url(#${p}-can${b.t})`} />
-          ))}
-          <circle cx={b.x} cy={b.y} r={b.r} fill={`url(#${p}-can${b.t})`} />
-          <ellipse cx={b.x - b.r * 0.3} cy={b.y - b.r * 0.36} rx={b.r * 0.5} ry={b.r * 0.34} fill={`url(#${p}-canlight)`} />
-          <ellipse cx={b.x + b.r * 0.1} cy={b.y + b.r * 0.6} rx={b.r * 0.7} ry={b.r * 0.3} fill={`url(#${p}-canshade)`} />
-        </g>
+        <FacetBlob key={`f${i}`} cx={b.x} cy={b.y} r={b.r} tone={b.t} seed={i * 131 + 5} n={11} soft={0.5} p={p} />
       ))}
       {[...deco.sideLeft, ...deco.sideRight].map((b, i) => (
-        <g key={`s${i}`}>
-          {scallops(b.x, b.y, b.r, 8, b.ph).map((s, j) => (
-            <circle key={j} cx={s.x} cy={s.y} r={s.r} fill={`url(#${p}-can${b.t})`} />
-          ))}
-          <circle cx={b.x} cy={b.y} r={b.r} fill={`url(#${p}-can${b.t})`} />
-          <ellipse cx={b.x} cy={b.y - b.r * 0.4} rx={b.r * 0.5} ry={b.r * 0.32} fill={`url(#${p}-canlight)`} />
-        </g>
+        <FacetBlob key={`s${i}`} cx={b.x} cy={b.y} r={b.r} tone={b.t} seed={i * 173 + 29} n={11} soft={0.6} p={p} />
       ))}
 
       {/* 栅栏 */}
@@ -416,15 +443,19 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
       ))}
 
       {/* 石头 */}
-      {deco.rocks.filter((r) => !inPond(r.x, r.y)).map((r, i) => (
-        <g key={i} transform={`translate(${r.x},${r.y}) rotate(${r.rot}) scale(${r.s})`}>
-          <ellipse cx="0" cy="5" rx="28" ry="8" fill={`url(#${p}-shadow)`} />
-          <path d="M -22,4 C -24,-8 -12,-18 0,-18 C 14,-18 24,-8 22,4 C 12,8 -12,8 -22,4 Z" fill={`url(#${p}-stone)`} stroke="#a89c7e" strokeWidth="1.2" />
-          <path d="M -12,-10 C -6,-14 4,-14 10,-10" stroke="#f2ead2" strokeWidth="3" strokeLinecap="round" fill="none" opacity="0.9" />
-          <path d="M -14,2 C -6,4 6,4 14,2" stroke="#8f8468" strokeWidth="1.2" fill="none" opacity="0.6" />
-          <circle cx="12" cy="-4" r="2.4" fill="#79c257" opacity="0.7" />
-        </g>
-      ))}
+      {deco.rocks.filter((r) => !inPond(r.x, r.y)).map((r, i) => {
+        const sh = polyStone(i * 57 + 3);
+        return (
+          <g key={i} transform={`translate(${r.x},${r.y}) rotate(${r.rot}) scale(${r.s * 1.5})`}>
+            <ellipse cx="0" cy="6" rx="20" ry="6" fill={`url(#${p}-shadow)`} />
+            <path d={sh.base} fill={`url(#${p}-stone)`} stroke="#a89c7e" strokeWidth="1" />
+            <path d={sh.top} fill="#f2ead2" opacity="0.8" />
+            <path d={sh.side} fill="#8f8468" opacity="0.42" />
+            <circle cx="9" cy="-3" r="2.4" fill="#79c257" opacity="0.7" />
+            <circle cx="-8" cy="4" r="1.6" fill="#79c257" opacity="0.5" />
+          </g>
+        );
+      })}
 
       {/* 花丛 */}
       {deco.patches.filter((f) => !inPond(f.x, f.y)).map((f, i) => {
@@ -458,11 +489,40 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
         <path d="M 486,486 C 462,468 442,448 420,420" stroke="#2ba39c" strokeWidth="16" strokeLinecap="round" fill="none" />
         <path d={POND_D} fill="none" stroke="#d9d0b0" strokeWidth="30" strokeLinejoin="round" opacity="0.95" />
         <path ref={pondRef} d={POND_D} fill={`url(#${p}-lake)`} />
+        {/* 水面 low-poly 光面 */}
+        <g clipPath={`url(#${p}-pondclip)`} opacity="0.62">
+          {[
+            { d: 'M 486,486 L 700,330 L 820,470 Z', f: '#7fd8c8', o: 0.2 },
+            { d: 'M 700,330 L 902,336 L 820,470 Z', f: '#a8ecdd', o: 0.22 },
+            { d: 'M 902,336 L 1128,484 L 820,470 Z', f: '#4fc0b4', o: 0.18 },
+            { d: 'M 486,486 L 820,470 L 700,620 Z', f: '#2ba39c', o: 0.16 },
+            { d: 'M 820,470 L 1128,484 L 940,610 Z', f: '#1d8f90', o: 0.16 },
+            { d: 'M 700,620 L 820,470 L 940,610 Z', f: '#5cc9bc', o: 0.18 },
+            { d: 'M 560,420 L 760,380 L 680,470 Z', f: '#bff2e6', o: 0.16 },
+            { d: 'M 860,400 L 1040,430 L 940,490 Z', f: '#bff2e6', o: 0.12 },
+            { d: 'M 640,540 L 800,520 L 760,600 Z', f: '#14767c', o: 0.14 },
+            { d: 'M 880,540 L 1040,520 L 960,600 Z', f: '#14767c', o: 0.12 },
+          ].map((t, i) => (
+            <path key={i} d={t.d} fill={t.f} opacity={t.o} />
+          ))}
+          <path d="M 486,470 L 1128,452 L 1128,478 L 486,498 Z" fill="#eafff5" opacity="0.1" />
+        </g>
         <path d={POND_D} fill="none" stroke="#0f6b70" strokeWidth="10" opacity="0.22" />
-        {/* 岸边树影倒映 */}
-        <ellipse cx="700" cy="382" rx="70" ry="24" fill={`url(#${p}-reflect)`} />
-        <ellipse cx="890" cy="368" rx="60" ry="20" fill={`url(#${p}-reflect)`} />
-        <ellipse cx="1030" cy="420" rx="52" ry="18" fill={`url(#${p}-reflect)`} />
+        {/* 岸边树影倒映：镜像团块 + 垂直衰减 */}
+        {[
+          { cx: 700, cy: 372, rx: 66, ry: 26 },
+          { cx: 890, cy: 360, rx: 56, ry: 22 },
+          { cx: 1030, cy: 412, rx: 48, ry: 19 },
+        ].map((r, i) => (
+          <g key={i} filter={`url(#${p}-refblur)`}>
+            <path
+              d={`M ${r.cx - r.rx},${r.cy} L ${r.cx - r.rx * 0.72},${r.cy + r.ry * 0.7} L ${r.cx - r.rx * 0.36},${r.cy + r.ry * 0.5} L ${r.cx - r.rx * 0.08},${r.cy + r.ry * 1.25} L ${r.cx + r.rx * 0.22},${r.cy + r.ry * 0.75} L ${r.cx + r.rx * 0.56},${r.cy + r.ry * 1.05} L ${r.cx + r.rx * 0.82},${r.cy + r.ry * 0.55} L ${r.cx + r.rx},${r.cy} Z`}
+              fill={`url(#${p}-reflectfade)`}
+            />
+            <path d={`M ${r.cx - r.rx * 0.6},${r.cy + r.ry * 0.5} L ${r.cx + r.rx * 0.5},${r.cy + r.ry * 0.42}`} stroke="#bff2e6" strokeWidth="1.6" opacity="0.35" fill="none" />
+            <path d={`M ${r.cx - r.rx * 0.34},${r.cy + r.ry * 1.05} L ${r.cx + r.rx * 0.3},${r.cy + r.ry * 0.98}`} stroke="#bff2e6" strokeWidth="1.3" opacity="0.25" fill="none" />
+          </g>
+        ))}
         {/* 水光 */}
         <path d="M 512,486 C 700,474 950,474 1108,484" stroke="#eafff5" strokeWidth="2.6" opacity="0.45" fill="none" />
         {[
@@ -514,19 +574,24 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
             <animateMotion dur="30s" begin="-9s" repeatCount="indefinite" rotate="auto" path="M 980,520 C 860,570 700,560 620,510 C 700,450 880,450 980,520 Z" />
           </g>
         </g>
-        {/* 石砌岸：逐石采样 */}
-        {stones.map((s, i) => (
-          <g key={i} transform={`translate(${s.x},${s.y}) rotate(${s.rot}) scale(${s.s})`}>
-            <ellipse rx="15" ry="10.5" fill={`url(#${p}-${s.tone ? 'stone2' : 'stone'})`} stroke="#9a8f72" strokeWidth="1" />
-            <path d="M -8,-4.5 C -2,-7.5 3,-7.5 8,-4.5" stroke="#f2ead2" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity="0.9" />
-            <path d="M -9,4 C -3,6 4,6 9,4" stroke="#8f8468" strokeWidth="1" fill="none" opacity="0.5" />
-            {i % 4 === 0 && <circle cx="7" cy="3" r="2.2" fill="#79c257" opacity="0.65" />}
-          </g>
-        ))}
+        {/* 石砌岸：逐石采样 + low-poly 石面 */}
+        {stones.map((s, i) => {
+          const sh = polyStone(i * 31 + 7);
+          return (
+            <g key={i} transform={`translate(${s.x},${s.y}) rotate(${s.rot}) scale(${s.s})`}>
+              <path d={sh.base} fill={`url(#${p}-${s.tone ? 'stone2' : 'stone'})`} stroke="#9a8f72" strokeWidth="1" />
+              <path d={sh.top} fill="#f2ead2" opacity="0.75" />
+              <path d={sh.side} fill="#8f8468" opacity="0.4" />
+              {i % 4 === 0 && <circle cx="7" cy="3" r="2.2" fill="#79c257" opacity="0.65" />}
+            </g>
+          );
+        })}
         {/* 木栈桥 */}
         <g transform="translate(1092,602) rotate(216)">
           <ellipse cx="36" cy="26" rx="52" ry="10" fill="#0f6b70" opacity="0.25" />
           <rect x="-8" y="-6" width="86" height="30" rx="4" fill={`url(#${p}-wood)`} stroke="#8a5a33" strokeWidth="1.8" />
+          <rect x="-6" y="17" width="82" height="6" rx="3" fill="#6d4426" opacity="0.4" />
+          <rect x="-6" y="-5" width="82" height="4" rx="2" fill="#e8c793" opacity="0.5" />
           {[8, 24, 40, 56, 72].map((x) => (
             <g key={x}>
               <line x1={x} y1="-4" x2={x} y2="22" stroke="#8a5a33" strokeWidth="1.4" opacity="0.7" />
@@ -541,6 +606,8 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
           <ellipse cx="0" cy="35" rx="14" ry="4" fill={`url(#${p}-shadow)`} />
           <rect x="-3" y="0" width="6" height="34" rx="2" fill={`url(#${p}-bark)`} />
           <rect x="-26" y="-20" width="52" height="24" rx="6" fill={`url(#${p}-wood)`} stroke="#8a5a33" strokeWidth="1.8" />
+          <path d="M 18,-19 L 25,-17 L 25,1 L 18,3 Z" fill="#8a5a33" opacity="0.35" />
+          <rect x="-24" y="-19" width="48" height="4" rx="2" fill="#e8c793" opacity="0.55" />
           <line x1="-20" y1="-16" x2="20" y2="-16" stroke="#e8c793" strokeWidth="1.2" opacity="0.7" />
           <circle cx="-20" cy="-8" r="1.2" fill="#6d4426" />
           <circle cx="20" cy="-8" r="1.2" fill="#6d4426" />
@@ -559,8 +626,10 @@ const SceneBackdrop = memo(function SceneBackdrop({ p }: { p: string }) {
       <g transform="translate(210,772)">
         <ellipse cx="0" cy="47" rx="44" ry="10" fill={`url(#${p}-shadow)`} />
         <path d="M -22,46 L -13,-16 L 13,-16 L 22,46 Z" fill={`url(#${p}-stone)`} stroke="#a89c7e" strokeWidth="1.6" />
+        <path d="M 5,-16 L 13,-16 L 22,46 L 10,46 Z" fill="#8f8468" opacity="0.45" />
         <path d="M -14,40 L -8,-12" stroke="#f2ead2" strokeWidth="2.4" opacity="0.8" />
         <path d="M -16,-16 L 0,-34 L 16,-16 Z" fill={`url(#${p}-wood)`} stroke="#8a5a33" strokeWidth="1.6" />
+        <path d="M 0,-34 L 16,-16 L 0,-16 Z" fill="#8a5a33" opacity="0.5" />
         <rect x="-6" y="24" width="12" height="22" rx="5" fill="#8a5a33" />
         <circle cx="0" cy="30" r="1.2" fill="#e8c793" />
         <g transform="translate(0,-24)">
@@ -611,6 +680,39 @@ const ForeClouds = memo(function ForeClouds({ p }: { p: string }) {
       {cloud(70, 930, 1.5, 'cb-c')}
       {cloud(1440, 900, 1.4, 'cb-a')}
       {cloud(1490, -30, 1.0, 'cb-b')}
+    </g>
+  );
+});
+
+/* ---------- 前景草缘与虚化叶 ---------- */
+
+const Foreground = memo(function Foreground({ p }: { p: string }) {
+  const fringe = useMemo(() => {
+    const rnd = mulberry32(777001);
+    return Array.from({ length: 52 }, (_, i) => ({
+      x: -30 + i * 32 + rnd() * 22,
+      y: 874 + rnd() * 26,
+      s: 1.5 + rnd() * 1.2,
+      flip: rnd() > 0.5 ? 1 : -1,
+      tone: Math.floor(rnd() * 3),
+    }));
+  }, []);
+  const FG = ['#357a34', '#3f8a3e', '#4f9a41'];
+  return (
+    <g pointerEvents="none">
+      {fringe.map((t, i) => (
+        <g key={i} transform={`translate(${t.x},${t.y}) scale(${t.s * t.flip},${t.s})`} opacity="0.85">
+          <path d="M 0,0 C -1,-6 -3,-10 -7,-14" stroke={FG[t.tone]} strokeWidth="2.4" fill="none" strokeLinecap="round" />
+          <path d="M 1,0 C 1,-7 1,-11 0,-17" stroke={FG[(t.tone + 1) % 3]} strokeWidth="2.4" fill="none" strokeLinecap="round" />
+          <path d="M 2,0 C 3,-6 6,-10 9,-13" stroke={FG[t.tone]} strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        </g>
+      ))}
+      <g filter={`url(#${p}-fgblur)`} opacity="0.55">
+        <path d="M -30,880 C 10,850 40,856 62,884 C 30,906 -6,904 -30,880 Z" fill="#4f9a41" />
+        <path d="M 20,900 C 50,872 84,878 104,906 C 74,926 40,924 20,900 Z" fill="#63b350" />
+        <path d="M 1560,860 C 1596,836 1630,842 1650,870 C 1620,892 1584,890 1560,860 Z" fill="#4f9a41" />
+        <path d="M 1500,900 C 1534,874 1568,880 1588,908 C 1558,928 1522,926 1500,900 Z" fill="#63b350" />
+      </g>
     </g>
   );
 });
@@ -798,6 +900,7 @@ export function ForestScene({ trees, eventsByTree, birthYear, selectedTreeId, on
             })}
           </g>
         )}
+        <Foreground p={p} />
         <ForeClouds p={p} />
       </svg>
     </div>
